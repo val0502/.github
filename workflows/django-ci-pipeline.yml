@@ -1,0 +1,53 @@
+# This file is located at: .github/workflows/django-ci-pipeline.yml
+# This is a reusable workflow for modern Python/Django projects using Poetry and pre-commit.
+
+name: Django CI Pipeline
+
+on:
+  workflow_call:
+    # Define inputs that the calling workflow can pass
+    inputs:
+      python-version:
+        description: 'The Python version to use'
+        required: false
+        type: string
+        default: '3.11'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ inputs.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache Poetry and pre-commit dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ runner.os }}-${{ inputs.python-version }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ inputs.python-version }}-poetry-
+
+      - name: Install dependencies with Poetry
+        run: poetry install --no-interaction --no-root
+
+      - name: Run pre-commit hooks (with ruff)
+        # This step assumes the calling repository has a .pre-commit-config.yaml
+        # file configured with ruff and other hooks.
+        run: |
+          poetry run pre-commit run --all-files
+
+      - name: Run Django tests
+        # This step runs the tests defined in your Django apps
+        run: poetry run python manage.py test
