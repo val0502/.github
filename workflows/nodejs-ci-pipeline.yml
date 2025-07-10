@@ -1,0 +1,41 @@
+# This file is located at: .github/workflows/nodejs-ci-pipeline.yml
+# This is a reusable workflow that can be called by other repositories.
+
+name: NodeJS CI Pipeline
+
+# This trigger allows the workflow to be called from another workflow
+on:
+  workflow_call:
+    # Define inputs that the calling workflow can pass
+    inputs:
+      node-version:
+        description: 'The Node.js version to use'
+        required: false
+        type: string
+        default: '18'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm' # Use npm's cache to speed up dependency installation
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run linter
+        # This step assumes you have a "lint" script in your package.json
+        # e.g., "lint": "eslint ."
+        run: npm run lint
+
+      - name: Run tests
+        # This step assumes you have a "test" script in your package.json
+        # e.g., "test": "jest"
+        run: npm test
