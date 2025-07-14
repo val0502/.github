@@ -1,0 +1,58 @@
+# This file is located at: .github/workflows/reusable-k8s-deployment.yml
+# This workflow deploys an application to a Kubernetes cluster using a Helm chart.
+
+name: Reusable Kubernetes Deployment
+
+on:
+  workflow_call:
+    # Define inputs for customization
+    inputs:
+      environment-name:
+        description: 'The deployment environment (e.g., staging, production)'
+        required: true
+        type: string
+      image-tag:
+        description: 'The tag of the Docker image to deploy (e.g., the git SHA)'
+        required: true
+        type: string
+      helm-chart-path:
+        description: 'The path to the Helm chart within the repository'
+        required: false
+        type: string
+        default: './chart' # Assumes a 'chart' directory in the root
+
+    # The kubeconfig file is sensitive and must be passed as a secret
+    secrets:
+      KUBECONFIG_BASE64:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment-name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.13.1' # Specify a stable Helm version
+
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Check Kubernetes connection
+        run: kubectl cluster-info
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install ${{ github.event.repository.name }}-${{ inputs.environment-name }} \
+            ${{ inputs.helm-chart-path }} \
+            --namespace ${{ inputs.environment-name }} \
+            --create-namespace \
+            --set image.tag=${{ inputs.image-tag }} \
+            --wait
