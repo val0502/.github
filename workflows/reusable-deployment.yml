@@ -1,0 +1,73 @@
+# This file is located at: .github/workflows/reusable-deployment.yml
+# This is a reusable workflow for deploying a Docker container to a server via SSH.
+
+name: Reusable Deployment
+
+on:
+  workflow_call:
+    # Define inputs that the calling workflow must provide
+    inputs:
+      environment-name:
+        description: 'The name of the deployment environment (e.g., staging, production)'
+        required: true
+        type: string
+      image-name:
+        description: 'The full name of the Docker image to deploy (e.g., user/repo:tag)'
+        required: true
+        type: string
+      container-name:
+        description: 'The name to give the running Docker container'
+        required: true
+        type: string
+      container-port:
+        description: 'The port to map on the host server (e.g., 80 or 8080)'
+        required: true
+        type: string
+
+    # Secrets must be passed explicitly from the calling workflow
+    secrets:
+      SSH_HOST:
+        required: true
+      SSH_USERNAME:
+        required: true
+      SSH_KEY:
+        required: true
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_PASSWORD:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # This links the job to the GitHub Environment for protection rules and secrets
+    environment: ${{ inputs.environment-name }}
+    steps:
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # Log in to Docker Hub on the server
+            echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+            
+            # Pull the new image
+            docker pull ${{ inputs.image-name }}
+            
+            # ** NEW STEP: Run database migrations in a temporary container **
+            # The '--rm' flag automatically removes the container after it exits.
+            # We run the 'migrate' command instead of the default server command.
+            docker run --rm ${{ inputs.image-name }} python manage.py migrate
+            
+            # Stop and remove the old application container if it exists
+            docker stop ${{ inputs.container-name }} || true
+            docker rm ${{ inputs.container-name }} || true
+            
+            # Run the new application container
+            docker run -d \
+              --restart always \
+              -p ${{ inputs.container-port }}:8000 \
+              --name ${{ inputs.container-name }} \
+              ${{ inputs.image-name }}
